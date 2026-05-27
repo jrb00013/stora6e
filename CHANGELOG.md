@@ -5,3 +5,4 @@ All notable changes to stora6e are documented here.
 - feat: rest api for scan and delete
 - feat: react dashboard ui
 - fix: exclude build directory from git
+- release: stora6e v1.0.0
