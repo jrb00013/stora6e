@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/stora6e.dir/src/main.cpp.o CMakeFiles/stora6e.dir/src/types.cpp.o CMakeFiles/stora6e.dir/src/scanner.cpp.o CMakeFiles/stora6e.dir/src/categorizer.cpp.o CMakeFiles/stora6e.dir/src/scan_manager.cpp.o CMakeFiles/stora6e.dir/src/api_server.cpp.o CMakeFiles/stora6e.dir/src/util.cpp.o -o stora6e  -lpthread -lstdc++fs 
