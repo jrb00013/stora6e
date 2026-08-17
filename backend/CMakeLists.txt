@@ -44,8 +44,6 @@ target_compile_options(stora6e PRIVATE -Wall -Wextra -Wpedantic)
 option(STORA6E_BUILD_TESTS "Build the backend unit test suite" ON)
 
 if(STORA6E_BUILD_TESTS)
-  include(CTest)
-
   FetchContent_Declare(
     catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git

@@ -7,6 +7,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(STORA6E_BUILD_FRONTEND "Build web UI with npm" ON)
 
+include(CTest)
+
 add_subdirectory(backend)
 
 if(STORA6E_BUILD_FRONTEND)
