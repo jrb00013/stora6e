@@ -71,6 +71,7 @@ ScanConfig parseConfig(const json& body) {
   cfg.scan_temp = body.value("scan_temp", cfg.scan_temp);
   cfg.scan_logs = body.value("scan_logs", cfg.scan_logs);
   cfg.scan_duplicates = body.value("scan_duplicates", cfg.scan_duplicates);
+  cfg.hash_duplicates = body.value("hash_duplicates", cfg.hash_duplicates);
   cfg.scan_empty_dirs = body.value("scan_empty_dirs", cfg.scan_empty_dirs);
   cfg.max_depth = body.value("max_depth", cfg.max_depth);
   cfg.max_results = body.value("max_results", cfg.max_results);

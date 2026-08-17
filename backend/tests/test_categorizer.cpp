@@ -1,9 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
+
 #include "stora6e/categorizer.hpp"
 #include "stora6e/util.hpp"
 
 using namespace stora6e;
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -163,6 +167,107 @@ TEST_CASE("finalizeDuplicates is a no-op when disabled", "[categorizer]") {
   cat.finalizeDuplicates(entries);
 
   REQUIRE(entries.size() == 2);
+}
+
+TEST_CASE("hash_duplicates confirms true content-identical duplicates", "[categorizer]") {
+  const auto dir = fs::temp_directory_path() / "stora6e_test_hash_dup_true";
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  const auto a = dir / "report.pdf";
+  const auto b_dir = dir / "b";
+  fs::create_directories(b_dir, ec);
+  const auto b = b_dir / "report.pdf";
+
+  // finalizeDuplicates only considers groups >= 1024 bytes.
+  const std::string content(1200, 'x');
+  {
+    std::ofstream fa(a, std::ios::binary);
+    fa << content;
+  }
+  {
+    std::ofstream fb(b, std::ios::binary);
+    fb << content;
+  }
+
+  auto cfg = baseConfig();
+  cfg.scan_duplicates = true;
+  cfg.hash_duplicates = true;
+  Categorizer cat(cfg);
+
+  std::vector<ScanEntry> entries;
+  const auto size = fs::file_size(a);
+  ScanEntry ea;
+  ea.path = a.string();
+  ea.size_bytes = size;
+  entries.push_back(ea);
+  ScanEntry eb;
+  eb.path = b.string();
+  eb.size_bytes = size;
+  entries.push_back(eb);
+
+  cat.finalizeDuplicates(entries);
+
+  int dup_count = 0;
+  for (const auto& e : entries) {
+    if (e.category == Category::Duplicate) ++dup_count;
+  }
+  REQUIRE(dup_count == 1);
+
+  fs::remove_all(dir, ec);
+}
+
+TEST_CASE("hash_duplicates rejects same-size/same-name files with different content",
+          "[categorizer]") {
+  const auto dir = fs::temp_directory_path() / "stora6e_test_hash_dup_false";
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  const auto a = dir / "report.pdf";
+  const auto b_dir = dir / "b";
+  fs::create_directories(b_dir, ec);
+  const auto b = b_dir / "report.pdf";
+
+  // Same length (and >= the 1024-byte duplicate floor), different bytes ->
+  // same size+name candidate, but must NOT be confirmed as a duplicate once
+  // content hashing is enabled.
+  {
+    std::ofstream fa(a, std::ios::binary);
+    fa << std::string(1200, 'a');
+  }
+  {
+    std::ofstream fb(b, std::ios::binary);
+    fb << std::string(1200, 'b');
+  }
+
+  auto cfg = baseConfig();
+  cfg.scan_duplicates = true;
+  cfg.hash_duplicates = true;
+  Categorizer cat(cfg);
+
+  std::vector<ScanEntry> entries;
+  const auto size = fs::file_size(a);
+  REQUIRE(size == fs::file_size(b));
+  ScanEntry ea;
+  ea.path = a.string();
+  ea.size_bytes = size;
+  entries.push_back(ea);
+  ScanEntry eb;
+  eb.path = b.string();
+  eb.size_bytes = size;
+  entries.push_back(eb);
+
+  cat.finalizeDuplicates(entries);
+
+  int dup_count = 0;
+  for (const auto& e : entries) {
+    if (e.category == Category::Duplicate) ++dup_count;
+  }
+  REQUIRE(dup_count == 0);
+
+  fs::remove_all(dir, ec);
 }
 
 TEST_CASE("finalizeDuplicates ignores tiny files below the size floor", "[categorizer]") {

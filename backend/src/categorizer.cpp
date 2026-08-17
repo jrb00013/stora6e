@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <unordered_map>
 
 #include "stora6e/util.hpp"
@@ -98,12 +99,29 @@ void Categorizer::finalizeDuplicates(std::vector<ScanEntry>& entries) {
 
   for (const auto& [key, paths] : groups) {
     if (paths.size() < 2 || key.size < 1024) continue;
+
+    std::optional<std::uint64_t> reference_hash;
+    if (config_.hash_duplicates) {
+      reference_hash = fileContentHash(paths[0]);
+      // If we can't even hash the reference file, fall back to trusting the
+      // size+name heuristic for this group rather than dropping it silently.
+    }
+
     for (std::size_t i = 1; i < paths.size(); ++i) {
+      if (config_.hash_duplicates && reference_hash.has_value()) {
+        const auto candidate_hash = fileContentHash(paths[i]);
+        // Only confirmed matches are marked as duplicates; anything that
+        // can't be read or doesn't hash the same as the reference file is
+        // skipped rather than risking a false-positive delete suggestion.
+        if (!candidate_hash.has_value() || *candidate_hash != *reference_hash) continue;
+      }
+
       ScanEntry dup;
       dup.path = paths[i];
       dup.size_bytes = key.size;
       dup.category = Category::Duplicate;
-      dup.detail = "duplicate of " + paths[0];
+      dup.detail = config_.hash_duplicates ? "duplicate of " + paths[0] + " (content-hash confirmed)"
+                                           : "duplicate of " + paths[0];
       dup.selected_default = true;
       entries.push_back(std::move(dup));
     }

@@ -36,6 +36,10 @@ struct ScanConfig {
   bool scan_temp = true;
   bool scan_logs = true;
   bool scan_duplicates = false;
+  // Opt-in, off by default: confirm same-size/same-name duplicate candidates
+  // with a content hash before marking them Duplicate, instead of trusting
+  // size+name alone. Only consulted when scan_duplicates is also true.
+  bool hash_duplicates = false;
   bool scan_empty_dirs = false;
   int max_depth = 32;
   std::uint64_t max_results = 50000;
