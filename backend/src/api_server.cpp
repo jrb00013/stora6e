@@ -1,8 +1,10 @@
 #include "stora6e/api_server.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -15,6 +17,32 @@ using json = nlohmann::json;
 namespace stora6e {
 
 namespace {
+
+// Local dev origins allowed to talk to the API. stora6e is a single-user,
+// localhost-only tool; there is no reason for any other origin (or any
+// non-localhost Host header) to reach it. Reflecting Origin unconditionally
+// (the previous behavior) turns any page the user's browser visits into a
+// potential drive-by trigger for /api/delete, and is also vulnerable to DNS
+// rebinding since the server only checks the Host it thinks it's bound to
+// implicitly. Both are checked explicitly below.
+const std::vector<std::string>& allowedOrigins() {
+  static const std::vector<std::string> origins = {
+      "http://127.0.0.1:5173", "http://localhost:5173",
+      "http://127.0.0.1:8765", "http://localhost:8765",
+  };
+  return origins;
+}
+
+bool isAllowedOrigin(const std::string& origin) {
+  const auto& origins = allowedOrigins();
+  return std::find(origins.begin(), origins.end(), origin) != origins.end();
+}
+
+bool isLocalHost(const std::string& host) {
+  // Host header may or may not include the port.
+  return host == "127.0.0.1" || host == "localhost" ||
+         host.rfind("127.0.0.1:", 0) == 0 || host.rfind("localhost:", 0) == 0;
+}
 
 json entryToJson(const ScanEntry& e) {
   return json{{"path", e.path},
@@ -66,6 +94,35 @@ std::string statusString(ScanStatus s) {
   }
 }
 
+// A delete request must reference a path that was actually surfaced by a
+// prior scan, or that falls under one of the tool's own allow-listed default
+// roots. This prevents an arbitrary-path delete via a crafted request body
+// (e.g. "/etc/passwd" or "../../../etc") even if CORS/Host checks were
+// somehow bypassed.
+bool isAllowedDeletePath(const ScanManager& manager, const std::string& raw_path) {
+  std::error_code ec;
+  const fs::path canon = fs::weakly_canonical(raw_path, ec);
+  if (ec) return false;
+  const std::string resolved = canon.string();
+
+  for (const auto& e : manager.results()) {
+    std::error_code entry_ec;
+    const fs::path entry_canon = fs::weakly_canonical(e.path, entry_ec);
+    if (!entry_ec && entry_canon == canon) return true;
+  }
+
+  for (const auto& root : defaultScanRoots()) {
+    std::error_code root_ec;
+    const fs::path root_canon = fs::weakly_canonical(root, root_ec);
+    if (root_ec) continue;
+    const std::string rc = root_canon.string();
+    if (resolved.rfind(rc, 0) != 0) continue;
+    if (resolved.size() == rc.size() || resolved[rc.size()] == '/') return true;
+  }
+
+  return false;
+}
+
 bool deletePath(const std::string& path, bool use_trash, std::string& err) {
   std::error_code ec;
   if (!fs::exists(path, ec)) {
@@ -109,9 +166,27 @@ ApiServer::ApiServer(ScanManager& manager, const std::string& web_root, int port
 void ApiServer::run() {
   httplib::Server svr;
 
-  svr.set_default_headers({{"Access-Control-Allow-Origin", "*"},
-                           {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
-                           {"Access-Control-Allow-Headers", "Content-Type"}});
+  // Reject anything that didn't come in over the loopback Host header before
+  // it reaches any route. This is the DNS-rebinding defense: an attacker
+  // page can get a browser to resolve evil.example to 127.0.0.1, but it
+  // can't make the browser send a Host header of "127.0.0.1"/"localhost".
+  svr.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
+    const auto host = req.get_header_value("Host");
+    if (!host.empty() && !isLocalHost(host)) {
+      res.status = 403;
+      res.set_content(R"({"error":"forbidden host"})", "application/json");
+      return httplib::Server::HandlerResponse::Handled;
+    }
+
+    const auto origin = req.get_header_value("Origin");
+    if (!origin.empty() && isAllowedOrigin(origin)) {
+      res.set_header("Access-Control-Allow-Origin", origin);
+      res.set_header("Vary", "Origin");
+      res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.set_header("Access-Control-Allow-Headers", "Content-Type");
+    }
+    return httplib::Server::HandlerResponse::Unhandled;
+  });
 
   svr.Options(R"(.*)", [](const httplib::Request&, httplib::Response& res) {
     res.status = 204;
@@ -210,7 +285,7 @@ void ApiServer::run() {
                     "application/json");
   });
 
-  svr.Post("/api/delete", [](const httplib::Request& req, httplib::Response& res) {
+  svr.Post("/api/delete", [this](const httplib::Request& req, httplib::Response& res) {
     json body;
     try {
       body = json::parse(req.body);
@@ -234,6 +309,13 @@ void ApiServer::run() {
     for (const auto& p : paths) {
       if (!p.is_string()) continue;
       const auto path = p.get<std::string>();
+
+      if (!isAllowedDeletePath(manager_, path)) {
+        failed.push_back(
+            json{{"path", path}, {"error", "path is not part of a scan result or an allow-listed root"}});
+        continue;
+      }
+
       std::string err;
       if (deletePath(path, use_trash, err)) {
         deleted.push_back(path);
