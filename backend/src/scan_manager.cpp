@@ -6,6 +6,16 @@
 
 namespace stora6e {
 
+ScanManager::~ScanManager() {
+  // A finished-but-unjoined worker thread is still joinable(), and a
+  // joinable std::thread destructor calls std::terminate. startScan() only
+  // joins the *previous* worker when a new scan begins, so a ScanManager
+  // that is destroyed after a scan completed (its common lifetime, e.g. at
+  // process shutdown) must join here instead.
+  cancel_.store(true);
+  if (worker_.joinable()) worker_.join();
+}
+
 ScanStatus ScanManager::status() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return status_;

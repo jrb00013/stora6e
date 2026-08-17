@@ -13,6 +13,8 @@ namespace stora6e {
 
 class ScanManager {
  public:
+  ~ScanManager();
+
   ScanStatus status() const;
   ScanProgress progress() const;
   std::vector<ScanEntry> results() const;
