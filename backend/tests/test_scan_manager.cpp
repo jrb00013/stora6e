@@ -1,10 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <filesystem>
 #include <thread>
 
 #include "stora6e/scan_manager.hpp"
+#include "stora6e/scanner.hpp"
 #include "stora6e/util.hpp"
+
+namespace fs = std::filesystem;
 
 using namespace stora6e;
 using namespace std::chrono_literals;
@@ -102,4 +106,50 @@ TEST_CASE("summary reflects zero entries after scanning a nonexistent root", "[s
   const auto summary = mgr.summary();
   REQUIRE(summary.total_entries == 0);
   REQUIRE(summary.total_reclaimable_bytes == 0);
+}
+
+TEST_CASE("an unexpected (non-benign) filesystem error surfaces as ScanStatus::Error",
+          "[scan_manager][scanner]") {
+  // A root whose name exceeds the filesystem's name-length limit is a
+  // deterministic way to provoke a non-benign std::error_code
+  // (ENAMETOOLONG) from fs::exists() without needing real permission
+  // changes or a filesystem race — this is exactly the kind of failure
+  // that used to be silently swallowed as an empty, "successful" scan.
+  const std::string too_long_name(5000, 'a');
+  const auto bad_root = (fs::temp_directory_path() / too_long_name).string();
+
+  ScanConfig cfg;
+  cfg.roots = {bad_root};
+  cfg.max_results = 10;
+
+  ScanManager mgr;
+  REQUIRE(mgr.startScan(cfg));
+  waitUntilNotRunning(mgr);
+
+  REQUIRE(mgr.status() == ScanStatus::Error);
+  REQUIRE(mgr.lastError().has_value());
+  REQUIRE(mgr.lastError()->find("filesystem error") != std::string::npos);
+}
+
+TEST_CASE("Scanner::lastError is empty after a clean scan of a real, empty directory",
+          "[scanner]") {
+  const auto dir = fs::temp_directory_path() / "stora6e_test_clean_dir";
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  ScanConfig cfg;
+  cfg.roots = {dir.string()};
+  cfg.max_results = 10;
+
+  Scanner scanner(cfg);
+  std::vector<ScanEntry> results;
+  ScanProgress progress;
+  std::atomic<bool> cancel{false};
+
+  scanner.run(results, progress, cancel, nullptr);
+
+  REQUIRE(scanner.lastError().empty());
+
+  fs::remove_all(dir, ec);
 }

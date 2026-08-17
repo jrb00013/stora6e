@@ -59,9 +59,9 @@ void ScanManager::cancelScan() {
 void ScanManager::runWorker(ScanConfig config) {
   std::vector<ScanEntry> local_results;
   ScanProgress local_progress;
+  Scanner scanner(config);
 
   try {
-    Scanner scanner(std::move(config));
     scanner.run(
         local_results, local_progress, cancel_,
         [this](const ScanProgress& p) {
@@ -72,17 +72,22 @@ void ScanManager::runWorker(ScanConfig config) {
     std::lock_guard<std::mutex> lock(mutex_);
     status_ = ScanStatus::Error;
     last_error_ = ex.what();
-    if (worker_.joinable()) {
-      // joined from startScan next time
-    }
     return;
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
   results_ = std::move(local_results);
   progress_ = local_progress;
-  status_ = cancel_.load() ? ScanStatus::Cancelled
-                           : (last_error_ ? ScanStatus::Error : ScanStatus::Complete);
+
+  // The walk may have hit unexpected (non-benign) std::error_code failures
+  // without throwing — those are still a real error worth surfacing to the
+  // frontend, even though we keep whatever partial results were gathered.
+  if (!scanner.lastError().empty()) {
+    status_ = ScanStatus::Error;
+    last_error_ = scanner.lastError();
+  } else {
+    status_ = cancel_.load() ? ScanStatus::Cancelled : ScanStatus::Complete;
+  }
 }
 
 ScanManager::Summary ScanManager::summary() const {

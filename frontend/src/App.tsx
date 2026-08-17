@@ -77,7 +77,11 @@ export default function App() {
     const poll = async () => {
       try {
         const s = await api.scanStatus();
+        const wasError = status?.status !== 'error' && s.status === 'error';
         setStatus(s);
+        if (wasError) {
+          showToast(s.error ? `Scan failed: ${s.error}` : 'Scan failed', 'error');
+        }
         if (s.status === 'complete' || s.status === 'cancelled' || s.status === 'error') {
           await refreshResults();
         }
@@ -258,6 +262,11 @@ export default function App() {
               {status.current_path && (
                 <div className="progress-meta">
                   <span style={{ opacity: 0.7 }}>{status.current_path}</span>
+                </div>
+              )}
+              {status.status === 'error' && status.error && (
+                <div className="progress-meta" style={{ color: '#e05d5d' }}>
+                  <span>Scan error: {status.error}</span>
                 </div>
               )}
             </div>

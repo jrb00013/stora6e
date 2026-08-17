@@ -7,6 +7,10 @@
 
 namespace stora6e {
 
+bool isBenignFilesystemError(const std::error_code& ec) {
+  return ec == std::errc::permission_denied || ec == std::errc::no_such_file_or_directory;
+}
+
 std::string homeDirectory() {
   const char* home = std::getenv("HOME");
 #ifdef _WIN32

@@ -73,6 +73,7 @@ if(STORA6E_BUILD_TESTS)
   add_executable(stora6e_tests
     tests/test_categorizer.cpp
     tests/test_scan_manager.cpp
+    tests/test_util.cpp
   )
   target_link_libraries(stora6e_tests PRIVATE stora6e_core Catch2::Catch2WithMain)
 
