@@ -1,11 +1,41 @@
 #include "stora6e/util.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <sstream>
 
 namespace stora6e {
+
+bool isBenignFilesystemError(const std::error_code& ec) {
+  return ec == std::errc::permission_denied || ec == std::errc::no_such_file_or_directory;
+}
+
+std::optional<std::uint64_t> fileContentHash(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return std::nullopt;
+
+  // FNV-1a 64-bit. Not cryptographic; this is only ever used to *confirm* a
+  // same-size/same-name candidate already produced by the size+name
+  // heuristic, not as a standalone duplicate key, so collision resistance
+  // beyond "good enough to catch accidental non-duplicates" isn't needed.
+  std::uint64_t hash = 14695981039346656037ULL;
+  constexpr std::uint64_t prime = 1099511628211ULL;
+
+  std::array<char, 64 * 1024> buf{};
+  while (in) {
+    in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+    const auto n = in.gcount();
+    for (std::streamsize i = 0; i < n; ++i) {
+      hash ^= static_cast<unsigned char>(buf[static_cast<std::size_t>(i)]);
+      hash *= prime;
+    }
+  }
+  if (in.bad()) return std::nullopt;
+  return hash;
+}
 
 std::string homeDirectory() {
   const char* home = std::getenv("HOME");

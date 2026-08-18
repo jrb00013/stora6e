@@ -12,6 +12,13 @@ namespace stora6e {
 Scanner::Scanner(ScanConfig config)
     : config_(std::move(config)), categorizer_(config_) {}
 
+void Scanner::recordError(const std::string& path, const std::error_code& ec) {
+  if (!ec || isBenignFilesystemError(ec)) return;
+  ++error_count_;
+  last_error_ = "encountered " + std::to_string(error_count_) +
+                " filesystem error(s) during scan; last: " + path + ": " + ec.message();
+}
+
 void Scanner::run(std::vector<ScanEntry>& results, ScanProgress& progress,
                   const std::atomic<bool>& cancel_flag,
                   std::function<void(const ScanProgress&)> on_progress) {
@@ -29,7 +36,11 @@ void Scanner::run(std::vector<ScanEntry>& results, ScanProgress& progress,
     progress.percent = (100.0 * root_index) / static_cast<double>(root_count);
     if (on_progress) on_progress(progress);
 
-    if (!fs::exists(root)) continue;
+    std::error_code root_ec;
+    const bool root_exists = fs::exists(root, root_ec);
+    if (root_ec) recordError(root, root_ec);
+    if (!root_exists) continue;
+
     walk(root, 0, results, progress, cancel_flag, on_progress);
     ++root_index;
   }
@@ -56,10 +67,16 @@ void Scanner::walk(const std::string& root, int depth, std::vector<ScanEntry>& r
   std::error_code ec;
   const fs::path p(root);
 
-  if (fs::is_symlink(p, ec)) return;
+  const bool symlink = fs::is_symlink(p, ec);
+  if (ec) recordError(root, ec);
+  if (symlink) return;
 
-  if (fs::is_directory(p, ec)) {
-    if (ec) return;
+  const bool is_dir = fs::is_directory(p, ec);
+  if (ec) {
+    recordError(root, ec);
+    return;
+  }
+  if (is_dir) {
     ++progress.dirs_scanned;
     progress.current_path = root;
 
@@ -69,6 +86,7 @@ void Scanner::walk(const std::string& root, int depth, std::vector<ScanEntry>& r
                                             ec);
            it != fs::directory_iterator(); it.increment(ec)) {
         if (ec) {
+          recordError(root, ec);
           ec.clear();
           continue;
         }
@@ -89,6 +107,7 @@ void Scanner::walk(const std::string& root, int depth, std::vector<ScanEntry>& r
          it != fs::directory_iterator(); it.increment(ec)) {
       if (cancel_flag.load() || results.size() >= config_.max_results) return;
       if (ec) {
+        recordError(root, ec);
         ec.clear();
         continue;
       }
@@ -97,14 +116,24 @@ void Scanner::walk(const std::string& root, int depth, std::vector<ScanEntry>& r
     return;
   }
 
-  if (!fs::is_regular_file(p, ec) || ec) return;
+  const bool regular = fs::is_regular_file(p, ec);
+  if (ec) {
+    recordError(root, ec);
+    return;
+  }
+  if (!regular) return;
 
   const auto size = fs::file_size(p, ec);
-  if (ec) return;
+  if (ec) {
+    recordError(root, ec);
+    return;
+  }
 
   std::int64_t mtime = 0;
   const auto ftime = fs::last_write_time(p, ec);
-  if (!ec) {
+  if (ec) {
+    recordError(root, ec);
+  } else {
     const auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
         ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
     mtime = std::chrono::duration_cast<std::chrono::seconds>(sctp.time_since_epoch()).count();
