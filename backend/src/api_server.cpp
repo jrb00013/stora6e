@@ -9,6 +9,7 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include "stora6e/summary.hpp"
 #include "stora6e/util.hpp"
 
 namespace fs = std::filesystem;
@@ -246,6 +247,26 @@ void ApiServer::run() {
              {"percent", prog.percent}};
     if (auto err = manager_.lastError()) out["error"] = *err;
     res.set_content(out.dump(), "application/json");
+  });
+
+  svr.Get("/api/scan/summary", [this](const httplib::Request&, httplib::Response& res) {
+    const auto summary = summarizeEntries(manager_.results());
+    json categories = json::array();
+    for (const auto& category : summary.categories) {
+      categories.push_back(json{{"category", categoryToString(category.category)},
+                                {"count", category.count},
+                                {"bytes", category.bytes},
+                                {"bytes_human", formatBytes(category.bytes)}});
+    }
+    res.set_content(json{{"categories", categories},
+                         {"total_entries", summary.total_entries},
+                         {"total_bytes", summary.total_bytes},
+                         {"total_bytes_human", formatBytes(summary.total_bytes)},
+                         {"unique_paths", summary.unique_paths},
+                         {"unique_bytes", summary.unique_bytes},
+                         {"unique_bytes_human", formatBytes(summary.unique_bytes)}}
+                        .dump(),
+                    "application/json");
   });
 
   svr.Get("/api/scan/results", [this](const httplib::Request& req, httplib::Response& res) {

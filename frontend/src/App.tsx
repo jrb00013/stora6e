@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, Category, ScanConfig, ScanEntry, ScanStatus } from './api';
+import { api, Category, ScanConfig, ScanEntry, ScanStatus, ScanSummary } from './api';
 
 const CATEGORIES: { id: Category | ''; label: string }[] = [
   { id: '', label: 'All' },
@@ -10,6 +10,26 @@ const CATEGORIES: { id: Category | ''; label: string }[] = [
   { id: 'log', label: 'Logs' },
   { id: 'duplicate', label: 'Duplicates' },
 ];
+
+const SUMMARY_LABELS: Record<Category, string> = {
+  old: 'Old',
+  large: 'Large',
+  cache: 'Cache',
+  temp: 'Temp',
+  log: 'Logs',
+  duplicate: 'Duplicates',
+  empty_dir: 'Empty dirs',
+  unknown: 'Unknown',
+};
+
+function visibleSummaryCategories(summary: ScanSummary) {
+  return summary.categories.filter((category) => {
+    if (category.category === 'unknown' || category.category === 'empty_dir') {
+      return category.count > 0;
+    }
+    return true;
+  });
+}
 
 function formatDate(unix: number) {
   if (!unix) return '—';
@@ -34,6 +54,7 @@ export default function App() {
   const [items, setItems] = useState<ScanEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [reclaimable, setReclaimable] = useState('—');
+  const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCat, setFilterCat] = useState<Category | ''>('');
   const [search, setSearch] = useState('');
@@ -57,6 +78,16 @@ export default function App() {
     });
   }, []);
 
+  const refreshSummary = useCallback(async () => {
+    try {
+      const data = await api.scanSummary();
+      setSummary(data);
+      setReclaimable(data.unique_bytes_human);
+    } catch {
+      /* idle */
+    }
+  }, []);
+
   const refreshResults = useCallback(async () => {
     try {
       const data = await api.scanResults({
@@ -66,11 +97,11 @@ export default function App() {
       });
       setItems(data.items);
       setTotal(data.total);
-      setReclaimable(data.summary.total_reclaimable_human);
     } catch {
       /* idle */
     }
-  }, [filterCat, search]);
+    await refreshSummary();
+  }, [filterCat, search, refreshSummary]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -84,6 +115,8 @@ export default function App() {
         }
         if (s.status === 'complete' || s.status === 'cancelled' || s.status === 'error') {
           await refreshResults();
+        } else if (s.status === 'idle') {
+          await refreshSummary();
         }
       } catch {
         setConnected(false);
@@ -92,7 +125,7 @@ export default function App() {
     poll();
     timer = setInterval(poll, status?.status === 'running' ? 400 : 2000);
     return () => clearInterval(timer);
-  }, [status?.status, refreshResults]);
+  }, [status?.status, refreshResults, refreshSummary]);
 
   useEffect(() => {
     if (status?.status === 'complete') refreshResults();
@@ -242,13 +275,34 @@ export default function App() {
             </div>
             <div className="stat">
               <div className="val">{reclaimable}</div>
-              <div className="lbl">Reclaimable</div>
+              <div className="lbl">Unique reclaimable</div>
             </div>
             <div className="stat">
               <div className="val">{selected.size}</div>
               <div className="lbl">Selected</div>
             </div>
           </div>
+
+          {summary && (
+            <div className="summary-block">
+              <div className="summary-cats">
+                {visibleSummaryCategories(summary).map((category) => (
+                  <div key={category.category} className="summary-cat">
+                    <div className={`name cat ${category.category}`}>
+                      {SUMMARY_LABELS[category.category]}
+                    </div>
+                    <div className="meta">
+                      {category.count.toLocaleString()} · {category.bytes_human}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="summary-note">
+                {summary.unique_paths.toLocaleString()} unique paths · {summary.unique_bytes_human}{' '}
+                reclaimable
+              </div>
+            </div>
+          )}
 
           {status && (
             <div className="progress-wrap">

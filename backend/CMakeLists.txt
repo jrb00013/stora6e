@@ -26,6 +26,7 @@ add_executable(stora6e
   src/scan_manager.cpp
   src/api_server.cpp
   src/util.cpp
+  src/summary.cpp
 )
 
 target_include_directories(stora6e PRIVATE
@@ -59,6 +60,7 @@ if(STORA6E_BUILD_TESTS)
     src/categorizer.cpp
     src/scan_manager.cpp
     src/util.cpp
+    src/summary.cpp
   )
   target_include_directories(stora6e_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -72,6 +74,7 @@ if(STORA6E_BUILD_TESTS)
     tests/test_categorizer.cpp
     tests/test_scan_manager.cpp
     tests/test_util.cpp
+    tests/test_summary.cpp
   )
   target_link_libraries(stora6e_tests PRIVATE stora6e_core Catch2::Catch2WithMain)
 
