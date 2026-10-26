@@ -9,8 +9,18 @@ Base URL: `http://127.0.0.1:8765`
 | POST | `/api/scan/start` | Begin scan |
 | POST | `/api/scan/cancel` | Cancel scan |
 | GET | `/api/scan/status` | Progress |
+| GET | `/api/scan/summary` | Per-category counts and bytes, plus a unique-path reclaimable total |
 | GET | `/api/scan/results` | Filtered results |
 | POST | `/api/delete` | Delete selected paths |
+
+## Scan summary
+
+`GET /api/scan/summary` summarizes the last scan held by the server. With no
+scan yet it returns zeros, not an error. `categories` is per-category
+`count` and `bytes` (a path in two categories is included in both).
+`unique_paths` and `unique_bytes` count each path once so the reclaimable
+total is not double-counted. `total_entries` and `total_bytes` are the raw
+sums across entries.
 
 ## Duplicate detection
 

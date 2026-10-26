@@ -18,6 +18,23 @@ export interface ScanEntry {
   selected_default: boolean;
 }
 
+export interface CategorySummary {
+  category: Category;
+  count: number;
+  bytes: number;
+  bytes_human: string;
+}
+
+export interface ScanSummary {
+  categories: CategorySummary[];
+  total_entries: number;
+  total_bytes: number;
+  total_bytes_human: string;
+  unique_paths: number;
+  unique_bytes: number;
+  unique_bytes_human: string;
+}
+
 export interface ScanStatus {
   status: 'idle' | 'running' | 'complete' | 'cancelled' | 'error';
   phase: string;
@@ -65,6 +82,7 @@ export const api = {
     json<{ ok: boolean }>('/api/scan/start', { method: 'POST', body: JSON.stringify(config) }),
   cancelScan: () => json<{ ok: boolean }>('/api/scan/cancel', { method: 'POST' }),
   scanStatus: () => json<ScanStatus>('/api/scan/status'),
+  scanSummary: () => json<ScanSummary>('/api/scan/summary'),
   scanResults: (params?: { category?: string; q?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.category) q.set('category', params.category);

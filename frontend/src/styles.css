@@ -223,6 +223,41 @@ button:not(:disabled):active {
   letter-spacing: 0.05em;
 }
 
+.summary-block {
+  margin-bottom: 1rem;
+}
+
+.summary-cats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.summary-cat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+}
+
+.summary-cat .name {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.summary-cat .meta {
+  margin-top: 0.15rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+
+.summary-note {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
 .progress-wrap {
   margin-bottom: 1rem;
 }

@@ -53,6 +53,7 @@ Static files are served from `./web` next to the binary after a full build.
 | POST | `/api/scan/start` | Start scan (JSON body) |
 | POST | `/api/scan/cancel` | Cancel running scan |
 | GET | `/api/scan/status` | Progress |
+| GET | `/api/scan/summary` | Per-category counts and bytes, plus a unique-path reclaimable total |
 | GET | `/api/scan/results` | Results (`?category=&q=&limit=&offset=`) |
 | POST | `/api/delete` | Delete paths (`confirm: true`, `use_trash: true`) |
 
@@ -60,7 +61,7 @@ Static files are served from `./web` next to the binary after a full build.
 
 - Review selections before deleting.
 - Avoid scanning system roots (`/`, `/usr`) unless you know what you are doing.
-- Duplicate detection uses size + filename grouping (fast heuristic, not full content hash).
+- Duplicate detection defaults to size + filename grouping. Content-hash confirmation is opt-in via `hash_duplicates` and off by default.
 
 ## License
 
